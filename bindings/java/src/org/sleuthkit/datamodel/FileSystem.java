@@ -32,7 +32,6 @@ public class FileSystem extends AbstractContent {
 	private long imgOffset, blockSize, blockCount, rootInum,
 			firstInum, lastInum;
 	private TskData.TSK_FS_TYPE_ENUM fsType;
-	private Content parent;
 	private volatile long filesystemHandle = 0;
 
 	/**
