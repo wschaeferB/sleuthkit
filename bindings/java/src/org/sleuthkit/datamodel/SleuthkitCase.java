@@ -64,6 +64,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.swing.SwingUtilities;
 import org.postgresql.util.PSQLState;
 import org.sleuthkit.datamodel.BlackboardArtifact.ARTIFACT_TYPE;
 import org.sleuthkit.datamodel.BlackboardAttribute.ATTRIBUTE_TYPE;
@@ -1907,24 +1908,23 @@ public class SleuthkitCase {
 			statement.execute("UPDATE tsk_db_info_extended SET name = 'CREATION_SCHEMA_MAJOR_VERSION' WHERE name = 'CREATED_SCHEMA_MAJOR_VERSION'");
 			statement.execute("UPDATE tsk_db_info_extended SET name = 'CREATION_SCHEMA_MINOR_VERSION' WHERE name = 'CREATED_SCHEMA_MINOR_VERSION'");
 
-			
-			
 			return new CaseDbSchemaVersionNumber(8, 3);
 		} finally {
 			closeResultSet(resultSet);
 			releaseSingleUserCaseWriteLock();
 		}
 	}
-	
+
 	/**
 	 * Updates a schema version 8.3 database to a schema version 8.4 database.
-	 * 
-	 * This includes a bug fix update for a misnamed column in tsk_event_descriptions in
-	 * the previous update code.
-	 * 
-	 * Note that 8.4 also introduced cascading deletes on many of the database tables. We do not need to 
-	 * add these in the upgrade code because data sources in cases that were originally created with 8.3 
-	 * or earlier can not be deleted.
+	 *
+	 * This includes a bug fix update for a misnamed column in
+	 * tsk_event_descriptions in the previous update code.
+	 *
+	 * Note that 8.4 also introduced cascading deletes on many of the database
+	 * tables. We do not need to add these in the upgrade code because data
+	 * sources in cases that were originally created with 8.3 or earlier can not
+	 * be deleted.
 	 *
 	 * @param schemaVersion The current schema version of the database.
 	 * @param connection    A connection to the case database.
@@ -1948,24 +1948,24 @@ public class SleuthkitCase {
 		Statement statement = connection.createStatement();
 		ResultSet results = null;
 
-		acquireSingleUserCaseWriteLock();				
+		acquireSingleUserCaseWriteLock();
 		try {
 			// This is a bug fix update for a misnamed column in tsk_event_descriptions in
 			// the previous update code.
 			if (null == getDatabaseType()) {
 				throw new TskCoreException("Unsupported data base type: " + getDatabaseType().toString());
-			}		
-			
+			}
+
 			switch (getDatabaseType()) {
 				case POSTGRESQL:
 					// Check if the misnamed column is present
 					results = statement.executeQuery("SELECT column_name FROM information_schema.columns "
-						+ "WHERE table_name='tsk_event_descriptions' and column_name='file_obj_id'");
+							+ "WHERE table_name='tsk_event_descriptions' and column_name='file_obj_id'");
 					if (results.next()) {
 						// In PostgreSQL we can rename the column if it exists
 						statement.execute("ALTER TABLE tsk_event_descriptions "
-							+ "RENAME COLUMN file_obj_id TO content_obj_id");
-						
+								+ "RENAME COLUMN file_obj_id TO content_obj_id");
+
 						// In 8.2 to 8.3 upgrade, the event_id & time column in tsk_events table was erroneously created as type INTEGER, instead of BIGINT
 						// Fix the schema, preserving any data if exists.
 						statement.execute("CREATE TABLE temp_tsk_events ( "
@@ -1974,18 +1974,18 @@ public class SleuthkitCase {
 								+ " event_description_id BIGINT NOT NULL REFERENCES tsk_event_descriptions(event_description_id),"
 								+ " time BIGINT NOT NULL, "
 								+ " UNIQUE (event_type_id, event_description_id, time))"
-						);	
-					
+						);
+
 						// Copy the data
 						statement.execute("INSERT INTO temp_tsk_events(event_id, event_type_id, "
 								+ "event_description_id, time) SELECT * FROM tsk_events");
-					
+
 						// Drop the old table
 						statement.execute("DROP TABLE tsk_events");
-					
+
 						// Rename the new table
 						statement.execute("ALTER TABLE temp_tsk_events RENAME TO tsk_events");
-						
+
 						//create tsk_events indices that were skipped in the 8.2 to 8.3 update code
 						statement.execute("CREATE INDEX events_data_source_obj_id  ON tsk_event_descriptions(data_source_obj_id) ");
 						statement.execute("CREATE INDEX events_content_obj_id  ON tsk_event_descriptions(content_obj_id) ");
@@ -2001,9 +2001,9 @@ public class SleuthkitCase {
 						if (results.getString("name") != null && results.getString("name").equals("file_obj_id")) {
 							hasMisnamedColumn = true;
 							break;
-						}	
+						}
 					}
-					
+
 					if (hasMisnamedColumn) {
 						// Since we can't rename the column we'll need to make new tables and copy the data
 						statement.execute("CREATE TABLE temp_tsk_event_descriptions ("
@@ -2020,16 +2020,16 @@ public class SleuthkitCase {
 								+ " FOREIGN KEY(data_source_obj_id) REFERENCES data_source_info(obj_id), "
 								+ " FOREIGN KEY(content_obj_id) REFERENCES tsk_files(obj_id), "
 								+ " FOREIGN KEY(artifact_id) REFERENCES blackboard_artifacts(artifact_id))"
-						);	
-					
+						);
+
 						statement.execute("CREATE TABLE temp_tsk_events ( "
 								+ " event_id INTEGER PRIMARY KEY, "
 								+ " event_type_id BIGINT NOT NULL REFERENCES tsk_event_types(event_type_id) ,"
 								+ " event_description_id BIGINT NOT NULL REFERENCES temp_tsk_event_descriptions(event_description_id),"
 								+ " time INTEGER NOT NULL, "
 								+ " UNIQUE (event_type_id, event_description_id, time))"
-						);	
-					
+						);
+
 						// Copy the data
 						statement.execute("INSERT INTO temp_tsk_event_descriptions(event_description_id, full_description, "
 								+ "med_description, short_description, data_source_obj_id, content_obj_id, artifact_id, "
@@ -2037,7 +2037,7 @@ public class SleuthkitCase {
 
 						statement.execute("INSERT INTO temp_tsk_events(event_id, event_type_id, "
 								+ "event_description_id, time) SELECT * FROM tsk_events");
-					
+
 						// Drop the old tables
 						statement.execute("DROP TABLE tsk_events");
 						statement.execute("DROP TABLE tsk_event_descriptions");
@@ -2045,7 +2045,7 @@ public class SleuthkitCase {
 						// Rename the new tables
 						statement.execute("ALTER TABLE temp_tsk_event_descriptions RENAME TO tsk_event_descriptions");
 						statement.execute("ALTER TABLE temp_tsk_events RENAME TO tsk_events");
-						
+
 						//create tsk_events indices
 						statement.execute("CREATE INDEX events_data_source_obj_id  ON tsk_event_descriptions(data_source_obj_id) ");
 						statement.execute("CREATE INDEX events_content_obj_id  ON tsk_event_descriptions(content_obj_id) ");
@@ -2057,14 +2057,14 @@ public class SleuthkitCase {
 				default:
 					throw new TskCoreException("Unsupported data base type: " + getDatabaseType().toString());
 			}
-			
+
 			// create pool info table
 			if (this.dbType.equals(DbType.SQLITE)) {
 				statement.execute("CREATE TABLE tsk_pool_info (obj_id INTEGER PRIMARY KEY, pool_type INTEGER NOT NULL, FOREIGN KEY(obj_id) REFERENCES tsk_objects(obj_id) ON DELETE CASCADE)");
 			} else {
 				statement.execute("CREATE TABLE tsk_pool_info (obj_id BIGSERIAL PRIMARY KEY, pool_type INTEGER NOT NULL, FOREIGN KEY(obj_id) REFERENCES tsk_objects(obj_id) ON DELETE CASCADE)");
 			}
-			
+
 			// Add new account types for newly supported messaging applications, if they dont exists already.
 			insertAccountTypeIfNotExists(statement, "IMO", "IMO");
 			insertAccountTypeIfNotExists(statement, "LINE", "LINE");
@@ -2076,28 +2076,28 @@ public class SleuthkitCase {
 			insertAccountTypeIfNotExists(statement, "XENDER", "Xender");
 			insertAccountTypeIfNotExists(statement, "ZAPYA", "Zapya");
 			insertAccountTypeIfNotExists(statement, "SHAREIT", "ShareIt");
-			
+
 			return new CaseDbSchemaVersionNumber(8, 4);
 		} finally {
 			closeResultSet(results);
 			closeStatement(statement);
 			releaseSingleUserCaseWriteLock();
-		}		
+		}
 	}
 
 	/**
-	 * Inserts a row for the given account type in account_types table, 
-	 * if one doesn't exist.
-	 * 
-	 * @param statement Statement to use to execute SQL.
-	 * @param type_name Account type name.
+	 * Inserts a row for the given account type in account_types table, if one
+	 * doesn't exist.
+	 *
+	 * @param statement    Statement to use to execute SQL.
+	 * @param type_name    Account type name.
 	 * @param display_name Account type display name.
-	 * 
+	 *
 	 * @throws TskCoreException
-	 * @throws SQLException 
+	 * @throws SQLException
 	 */
 	private void insertAccountTypeIfNotExists(Statement statement, String type_name, String display_name) throws TskCoreException, SQLException {
-		
+
 		String insertSQL = String.format("INTO account_types(type_name, display_name) VALUES ('%s', '%s')", type_name, display_name);
 		switch (getDatabaseType()) {
 			case POSTGRESQL:
@@ -2111,7 +2111,8 @@ public class SleuthkitCase {
 		}
 		statement.execute(insertSQL); //NON-NLS
 	}
- /**
+
+	/**
 	 * Extract the extension from a file name.
 	 *
 	 * @param fileName the file name to extract the extension from.
@@ -5892,12 +5893,12 @@ public class SleuthkitCase {
 			releaseSingleUserCaseWriteLock();
 		}
 	}
-	
+
 	/**
 	 * Add a pool to the database
 	 *
 	 * @param parentObjId Object ID of the pool's parent
-     * @param type        Type of pool
+	 * @param type        Type of pool
 	 * @param transaction Case DB transaction
 	 *
 	 * @return the newly created Pool
@@ -5928,7 +5929,7 @@ public class SleuthkitCase {
 			closeStatement(statement);
 			releaseSingleUserCaseWriteLock();
 		}
-	}		
+	}
 
 	/**
 	 * Add a FileSystem to the database.
@@ -7525,7 +7526,7 @@ public class SleuthkitCase {
 	FileSystem getFileSystemById(long id, Volume parent) throws TskCoreException {
 		return getFileSystemByIdHelper(id, parent);
 	}
-	
+
 	/**
 	 * Get a pool by the object id
 	 *
@@ -7539,8 +7540,8 @@ public class SleuthkitCase {
 	 */
 	Pool getPoolById(long id, Content parent) throws TskCoreException {
 		return getPoolByIdHelper(id, parent);
-	}	
-	
+	}
+
 	/**
 	 * @param id       ID of the desired Volume
 	 * @param parentId ID of the Volume's parent
@@ -7554,7 +7555,7 @@ public class SleuthkitCase {
 		pool.setParentId(parentId);
 		return pool;
 	}
-	
+
 	/**
 	 * Get pool by id and Content parent
 	 *
@@ -7570,13 +7571,13 @@ public class SleuthkitCase {
 
 		acquireSingleUserCaseReadLock();
 		try (CaseDbConnection connection = connections.getConnection();
-			 Statement s = connection.createStatement();
-			 ResultSet rs = connection.executeQuery(s, "SELECT * FROM tsk_pool_info " //NON-NLS
-					+ "where obj_id = " + id);) { //NON-NLS
+				Statement s = connection.createStatement();
+				ResultSet rs = connection.executeQuery(s, "SELECT * FROM tsk_pool_info " //NON-NLS
+						+ "where obj_id = " + id);) { //NON-NLS
 			if (rs.next()) {
 				Pool pool = new Pool(this, rs.getLong("obj_id"), TskData.TSK_POOL_TYPE_ENUM.valueOf(rs.getLong("pool_type")).getName(), rs.getLong("pool_type"));
 				pool.setParent(parent);
-				
+
 				return pool;
 			} else {
 				throw new TskCoreException("No pool found for ID:" + id);
@@ -7906,7 +7907,7 @@ public class SleuthkitCase {
 		}
 		return children;
 	}
-	
+
 	/**
 	 * Returns the list of direct children for a given Pool
 	 *
@@ -7967,7 +7968,7 @@ public class SleuthkitCase {
 			}
 		}
 		return children;
-	}	
+	}
 
 	/**
 	 * Returns the list of direct children for a given VolumeSystem
@@ -11154,6 +11155,10 @@ public class SleuthkitCase {
 		}
 
 		CaseDbConnection getConnection() throws TskCoreException {
+			if (SwingUtilities.isEventDispatchThread()) {
+				throw new IllegalStateException("Connection being gotten on EDT WJS-TODO");
+			}
+
 			if (pooledDataSource == null) {
 				throw new TskCoreException("Error getting case database connection - case is closed");
 			}
